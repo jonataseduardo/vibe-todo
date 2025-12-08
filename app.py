@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from vibe_todo.database import create_db_and_tables
 from vibe_todo.logger import logger
 
 # configure page
@@ -14,6 +15,15 @@ st.set_page_config(
 
 # initialize logger
 logger.info("Application started")
+
+# initialize database
+try:
+    create_db_and_tables()
+    logger.info("Database initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize database: {e}")
+    st.error("Failed to initialize database. Please check the logs.")
+    st.stop()
 
 # main content
 st.title("Hello World!")
