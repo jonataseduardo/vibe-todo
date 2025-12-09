@@ -7,17 +7,17 @@
 ## Subtasks
 
 ### 15.1 Implement Session State Management
-- [ ] Initialize session state variables:
+- [x] Initialize session state variables:
   - `current_view`
   - `selected_list_id`
   - `task_filters`
   - `expanded_tasks` (set)
-- [ ] Create helper functions to manage state
+- [x] Create helper functions to manage state
 
 ### 15.2 Create Database Session Helper
-- [ ] Create function to get database session
-- [ ] Use context manager for session handling
-- [ ] Integrate with Streamlit's execution flow
+- [x] Create function to get database session
+- [x] Use context manager for session handling
+- [x] Integrate with Streamlit's execution flow
 
 ## Acceptance Criteria
 - ✅ Session state management working

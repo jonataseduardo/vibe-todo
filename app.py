@@ -3,9 +3,18 @@
 import streamlit as st
 from sqlalchemy import Engine
 
-from vibe_todo.database import create_db_and_tables, get_engine, get_session
+from vibe_todo.database import create_db_and_tables, get_engine
+from vibe_todo.db_helper import get_db_session
 from vibe_todo.logger import logger
-from vibe_todo.services import get_all_lists
+from vibe_todo.services import get_all_lists, create_list
+from vibe_todo.state import (
+    init_session_state,
+    get_current_view,
+    set_current_view,
+    get_selected_list_id,
+    get_show_add_list_dialog,
+    set_show_add_list_dialog
+)
 
 # configure page
 st.set_page_config(
@@ -50,10 +59,7 @@ except Exception as e:
     st.stop()
 
 # initialize session state
-if "selected_view" not in st.session_state:
-    st.session_state.selected_view = "My Day"
-if "show_add_list_dialog" not in st.session_state:
-    st.session_state.show_add_list_dialog = False
+init_session_state()
 
 # create navigation sidebar
 with st.sidebar:
@@ -63,24 +69,26 @@ with st.sidebar:
     # System views
     st.subheader("Views")
     
+    current_view = get_current_view()
+    
     # My Day button
-    if st.button("📅 My Day", use_container_width=True, type="primary" if st.session_state.selected_view == "My Day" else "secondary"):
-        st.session_state.selected_view = "My Day"
+    if st.button("📅 My Day", use_container_width=True, type="primary" if current_view == "My Day" else "secondary"):
+        set_current_view("My Day")
         st.rerun()
     
     # Important button
-    if st.button("⭐ Important", use_container_width=True, type="primary" if st.session_state.selected_view == "Important" else "secondary"):
-        st.session_state.selected_view = "Important"
+    if st.button("⭐ Important", use_container_width=True, type="primary" if current_view == "Important" else "secondary"):
+        set_current_view("Important")
         st.rerun()
     
     # Planned button
-    if st.button("📆 Planned", use_container_width=True, type="primary" if st.session_state.selected_view == "Planned" else "secondary"):
-        st.session_state.selected_view = "Planned"
+    if st.button("📆 Planned", use_container_width=True, type="primary" if current_view == "Planned" else "secondary"):
+        set_current_view("Planned")
         st.rerun()
     
     # Tasks (All) button
-    if st.button("📝 Tasks", use_container_width=True, type="primary" if st.session_state.selected_view == "Tasks" else "secondary"):
-        st.session_state.selected_view = "Tasks"
+    if st.button("📝 Tasks", use_container_width=True, type="primary" if current_view == "Tasks" else "secondary"):
+        set_current_view("Tasks")
         st.rerun()
     
     st.divider()
@@ -90,19 +98,20 @@ with st.sidebar:
     
     # Fetch custom lists (non-system lists)
     try:
-        with get_session() as session:
+        with get_db_session() as session:
             all_lists = get_all_lists(session)
             custom_lists = [lst for lst in all_lists if not lst.is_system]
             
             # Display custom lists
             for custom_list in custom_lists:
+                is_selected = (current_view == "List" and get_selected_list_id() == custom_list.id)
                 if st.button(
                     f"📁 {custom_list.name}",
                     use_container_width=True,
-                    type="primary" if st.session_state.selected_view == f"List:{custom_list.id}" else "secondary",
+                    type="primary" if is_selected else "secondary",
                     key=f"list_{custom_list.id}"
                 ):
-                    st.session_state.selected_view = f"List:{custom_list.id}"
+                    set_current_view("List", custom_list.id)
                     st.rerun()
     except Exception as e:
         logger.error(f"Failed to fetch custom lists: {e}")
@@ -112,11 +121,11 @@ with st.sidebar:
     
     # Add New List button
     if st.button("➕ Add New List", use_container_width=True, type="secondary"):
-        st.session_state.show_add_list_dialog = True
+        set_show_add_list_dialog(True)
         st.rerun()
 
 # Handle Add New List dialog
-if st.session_state.show_add_list_dialog:
+if get_show_add_list_dialog():
     with st.sidebar:
         st.divider()
         st.subheader("Add New List")
@@ -126,13 +135,12 @@ if st.session_state.show_add_list_dialog:
             if st.button("Create", use_container_width=True):
                 if new_list_name and new_list_name.strip():
                     try:
-                        from vibe_todo.services import create_list
-                        with get_session() as session:
+                        with get_db_session() as session:
                             new_list = create_list(new_list_name.strip(), session)
                             logger.info(f"Created new list: {new_list.name}")
                             st.success(f"List '{new_list.name}' created!")
-                            st.session_state.show_add_list_dialog = False
-                            st.session_state.selected_view = f"List:{new_list.id}"
+                            set_show_add_list_dialog(False)
+                            set_current_view("List", new_list.id)
                             st.rerun()
                     except Exception as e:
                         logger.error(f"Failed to create list: {e}")
@@ -141,14 +149,18 @@ if st.session_state.show_add_list_dialog:
                     st.warning("Please enter a list name")
         with col2:
             if st.button("Cancel", use_container_width=True):
-                st.session_state.show_add_list_dialog = False
+                set_show_add_list_dialog(False)
                 st.rerun()
 
 # main content
 st.title("Hello World!")
 st.header("Welcome to Vibe Todo")
 st.write("This is a Microsoft TODO-like application built with Streamlit.")
-st.write(f"**Current view:** {st.session_state.selected_view}")
+
+if get_current_view() == "List":
+    st.write(f"**Current view:** {get_current_view()} (ID: {get_selected_list_id()})")
+else:
+    st.write(f"**Current view:** {get_current_view()}")
 
 # log that page was rendered
 logger.info("Hello world page rendered successfully")
