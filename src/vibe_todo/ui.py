@@ -12,7 +12,8 @@ from vibe_todo.services import (
     delete_task,
     get_my_day_tasks,
     get_all_tasks,
-    add_to_my_day
+    add_to_my_day,
+    get_important_tasks
 )
 from vibe_todo.logger import logger
 
@@ -151,3 +152,47 @@ def render_my_day_view(session: Session):
     except Exception as e:
         logger.error(f"Error rendering My Day view: {e}")
         st.error("Failed to load My Day tasks")
+
+
+def render_important_view(session: Session):
+    """
+    Render the 'Important' view.
+
+    Args:
+        session: Database session
+    """
+    st.title("⭐ Important")
+    
+    # Filter controls
+    col1, col2 = st.columns([0.3, 0.7])
+    with col1:
+        filter_status = st.selectbox(
+            "Filter by status",
+            ["All", "Incomplete", "Completed"],
+            key="important_filter_status",
+            label_visibility="collapsed"
+        )
+
+    try:
+        tasks = get_important_tasks(session)
+        
+        # Apply filters
+        if filter_status == "Incomplete":
+            tasks = [t for t in tasks if not t.is_completed]
+        elif filter_status == "Completed":
+            tasks = [t for t in tasks if t.is_completed]
+            
+        st.caption(f"{len(tasks)} tasks")
+        
+        if not tasks:
+            if filter_status == "All":
+                st.info("No important tasks found. Mark tasks as important to see them here!")
+            else:
+                st.info(f"No {filter_status.lower()} important tasks found.")
+        else:
+            for task in tasks:
+                render_task_card(task, session)
+
+    except Exception as e:
+        logger.error(f"Error rendering Important view: {e}")
+        st.error("Failed to load Important tasks")

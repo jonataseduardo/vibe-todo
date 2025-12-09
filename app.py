@@ -15,7 +15,7 @@ from vibe_todo.state import (
     get_show_add_list_dialog,
     set_show_add_list_dialog
 )
-from vibe_todo.ui import render_my_day_view
+from vibe_todo.ui import render_my_day_view, render_important_view
 
 # configure page
 st.set_page_config(
@@ -158,6 +158,8 @@ current_view_name = get_current_view()
 with get_db_session() as session:
     if current_view_name == "My Day":
         render_my_day_view(session)
+    elif current_view_name == "Important":
+        render_important_view(session)
     else:
         st.title("Hello World!")
         st.header("Welcome to Vibe Todo")
