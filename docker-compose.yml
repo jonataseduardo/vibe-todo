@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # colima on mac will automatically detect and use the correct platform
+      # for mac m1/m2/m3 (arm64), colima uses linux/arm64
+      # for mac intel or linux (amd64), colima uses linux/amd64
+      # you can override by setting DOCKER_DEFAULT_PLATFORM env var or using --platform flag
+    # platform will be auto-detected by colima/docker
+    # uncomment and set to specific platform if needed:
+    # platform: linux/amd64  # for intel mac or linux x86_64
+    # platform: linux/arm64   # for apple silicon mac
+    container_name: vibe-todo-app
+    ports:
+      - "8501:8501"
+    volumes:
+      # mount source code for hot reload
+      - ./src:/app/src
+      - ./app.py:/app/app.py
+      # mount data directory for database persistence
+      - ./data:/app/data
+    environment:
+      # debug mode for local development
+      - LOG_ENV=dev
+      - LOG_LEVEL=DEBUG
+      - LOG_TO_FILE=false
+      # streamlit configuration
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
