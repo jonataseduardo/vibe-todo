@@ -14,7 +14,8 @@ from vibe_todo.services import (
     get_all_tasks,
     add_to_my_day,
     get_important_tasks,
-    get_planned_tasks
+    get_planned_tasks,
+    get_all_lists
 )
 from vibe_todo.logger import logger
 
@@ -293,3 +294,81 @@ def render_planned_view(session: Session):
     except Exception as e:
         logger.error(f"Error rendering Planned view: {e}")
         st.error("Failed to load Planned tasks")
+
+
+def render_tasks_view(session: Session):
+    """
+    Render the 'Tasks' view with filtering.
+
+    Args:
+        session: Database session
+    """
+    st.title("📝 Tasks")
+
+    # Filter controls
+    with st.expander("Filters", expanded=True):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Filter by List
+            try:
+                all_lists = get_all_lists(session)
+                list_options = {"All Lists": None}
+                for lst in all_lists:
+                    list_options[lst.name] = lst.id
+                
+                selected_list_name = st.selectbox(
+                    "List",
+                    options=list_options.keys(),
+                    key="tasks_filter_list"
+                )
+                selected_list_id = list_options[selected_list_name]
+            except Exception as e:
+                logger.error(f"Error loading lists for filter: {e}")
+                st.error("Error loading lists")
+                selected_list_id = None
+
+        with col2:
+            # Filter by Status
+            status_options = ["All", "Active", "Completed"]
+            selected_status = st.selectbox(
+                "Status",
+                options=status_options,
+                key="tasks_filter_status"
+            )
+
+        with col3:
+            # Filter by Important
+            # Add some spacing to align with selectboxes
+            st.write("")
+            st.write("")
+            filter_important = st.checkbox("Show only Important", key="tasks_filter_important")
+
+    # Build filters dictionary
+    filters = {}
+    
+    if selected_list_id is not None:
+        filters["list_id"] = selected_list_id
+        
+    if selected_status == "Active":
+        filters["is_completed"] = False
+    elif selected_status == "Completed":
+        filters["is_completed"] = True
+        
+    if filter_important:
+        filters["is_important"] = True
+
+    try:
+        tasks = get_all_tasks(session, filters=filters)
+        
+        st.caption(f"Found {len(tasks)} tasks")
+        
+        if not tasks:
+            st.info("No tasks found matching the selected filters.")
+        else:
+            for task in tasks:
+                render_task_card(task, session)
+
+    except Exception as e:
+        logger.error(f"Error rendering Tasks view: {e}")
+        st.error("Failed to load tasks")
