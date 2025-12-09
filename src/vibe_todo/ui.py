@@ -1,6 +1,6 @@
 """UI components for vibe-todo application."""
 
-from datetime import date
+from datetime import date, timedelta
 import streamlit as st
 from sqlmodel import Session
 
@@ -13,7 +13,8 @@ from vibe_todo.services import (
     get_my_day_tasks,
     get_all_tasks,
     add_to_my_day,
-    get_important_tasks
+    get_important_tasks,
+    get_planned_tasks
 )
 from vibe_todo.logger import logger
 
@@ -196,3 +197,99 @@ def render_important_view(session: Session):
     except Exception as e:
         logger.error(f"Error rendering Important view: {e}")
         st.error("Failed to load Important tasks")
+
+
+def _group_tasks_by_date(tasks: list[Task]) -> dict[str, list[Task]]:
+    """
+    Helper function to group tasks by date categories.
+    
+    Categories:
+    - Today: due_date <= today
+    - Tomorrow: due_date == tomorrow
+    - This Week: tomorrow < due_date <= today + 7 days
+    - Later: due_date > today + 7 days
+    """
+    grouped = {
+        "Today": [],
+        "Tomorrow": [],
+        "This Week": [],
+        "Later": []
+    }
+    
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    next_week_end = today + timedelta(days=7)
+    
+    for task in tasks:
+        if not task.due_date:
+            continue
+            
+        d = task.due_date
+        
+        if d <= today:
+            grouped["Today"].append(task)
+        elif d == tomorrow:
+            grouped["Tomorrow"].append(task)
+        elif tomorrow < d <= next_week_end:
+            grouped["This Week"].append(task)
+        else:
+            grouped["Later"].append(task)
+            
+    return grouped
+
+
+def render_planned_view(session: Session):
+    """
+    Render the 'Planned' view.
+
+    Args:
+        session: Database session
+    """
+    st.title("📆 Planned")
+
+    try:
+        tasks = get_planned_tasks(session)
+        
+        # Sort by due date
+        tasks.sort(key=lambda t: t.due_date if t.due_date else date.max)
+        
+        # Group tasks
+        grouped = _group_tasks_by_date(tasks)
+        
+        # Check if we have any tasks
+        if not tasks:
+            st.info("No planned tasks found. Add a due date to your tasks to see them here!")
+            return
+
+        # Render groups
+        # Today
+        if grouped["Today"]:
+            with st.expander(f"Today ({len(grouped['Today'])})", expanded=True):
+                for task in grouped["Today"]:
+                    render_task_card(task, session)
+        
+        # Tomorrow
+        if grouped["Tomorrow"]:
+            with st.expander(f"Tomorrow ({len(grouped['Tomorrow'])})", expanded=True):
+                for task in grouped["Tomorrow"]:
+                    render_task_card(task, session)
+
+        # This Week
+        if grouped["This Week"]:
+            with st.expander(f"This Week ({len(grouped['This Week'])})", expanded=True):
+                for task in grouped["This Week"]:
+                    render_task_card(task, session)
+                    
+        # Later
+        if grouped["Later"]:
+            with st.expander(f"Later ({len(grouped['Later'])})", expanded=False):
+                for task in grouped["Later"]:
+                    render_task_card(task, session)
+                    
+        # If all groups are empty (shouldn't happen if tasks is not empty, unless due_dates are missing which is filtered)
+        if not any(grouped.values()):
+             st.info("No planned tasks found.")
+
+    except Exception as e:
+        logger.error(f"Error rendering Planned view: {e}")
+        st.error("Failed to load Planned tasks")
