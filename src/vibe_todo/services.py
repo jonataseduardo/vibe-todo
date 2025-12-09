@@ -104,11 +104,15 @@ def get_all_lists(session: Session) -> list[List]:
     """
     logger.info("Fetching all lists")
 
-    statement = select(List)
-    lists = session.exec(statement).all()
+    try:
+        statement = select(List)
+        lists = session.exec(statement).all()
 
-    logger.info(f"Found {len(lists)} lists")
-    return list(lists)
+        logger.info(f"Found {len(lists)} lists")
+        return list(lists)
+    except Exception as e:
+        logger.error(f"Failed to fetch all lists: {e}")
+        raise
 
 
 def get_list_by_id(list_id: int, session: Session) -> List | None:
@@ -124,15 +128,19 @@ def get_list_by_id(list_id: int, session: Session) -> List | None:
     """
     logger.info(f"Fetching list with id: {list_id}")
 
-    statement = select(List).where(List.id == list_id)
-    list_instance = session.exec(statement).first()
+    try:
+        statement = select(List).where(List.id == list_id)
+        list_instance = session.exec(statement).first()
 
-    if list_instance:
-        logger.info(f"Found list with id: {list_id}, name: {list_instance.name}")
-    else:
-        logger.warning(f"List with id: {list_id} not found")
+        if list_instance:
+            logger.info(f"Found list with id: {list_id}, name: {list_instance.name}")
+        else:
+            logger.warning(f"List with id: {list_id} not found")
 
-    return list_instance
+        return list_instance
+    except Exception as e:
+        logger.error(f"Failed to fetch list with id {list_id}: {e}")
+        raise
 
 
 def update_list(list_id: int, name: str, session: Session) -> List:
@@ -221,11 +229,15 @@ def get_system_lists(session: Session) -> list[List]:
     """
     logger.info("Fetching all system lists")
 
-    statement = select(List).where(List.is_system == True)  # noqa: E712
-    lists = session.exec(statement).all()
+    try:
+        statement = select(List).where(List.is_system == True)  # noqa: E712
+        lists = session.exec(statement).all()
 
-    logger.info(f"Found {len(lists)} system lists")
-    return list(lists)
+        logger.info(f"Found {len(lists)} system lists")
+        return list(lists)
+    except Exception as e:
+        logger.error(f"Failed to fetch system lists: {e}")
+        raise
 
 
 def get_or_create_system_list(name: str, session: Session) -> List:
@@ -238,20 +250,27 @@ def get_or_create_system_list(name: str, session: Session) -> List:
 
     Returns:
         List: The existing or newly created system list instance
+
+    Raises:
+        ValueError: If name is empty or creation fails
     """
     logger.info(f"Getting or creating system list with name: {name}")
 
-    # Try to find existing system list with this name
-    statement = select(List).where(List.name == name, List.is_system == True)  # noqa: E712
-    list_instance = session.exec(statement).first()
+    if not name or not name.strip():
+        logger.error("Cannot get or create system list with empty name")
+        raise ValueError("System list name cannot be empty")
 
-    if list_instance:
-        logger.info(f"Found existing system list with name: {name}, id: {list_instance.id}")
-        return list_instance
-
-    # Create new system list
-    logger.info(f"Creating new system list with name: {name}")
     try:
+        # Try to find existing system list with this name
+        statement = select(List).where(List.name == name, List.is_system == True)  # noqa: E712
+        list_instance = session.exec(statement).first()
+
+        if list_instance:
+            logger.info(f"Found existing system list with name: {name}, id: {list_instance.id}")
+            return list_instance
+
+        # Create new system list
+        logger.info(f"Creating new system list with name: {name}")
         new_list = List(name=name.strip(), is_system=True)
         session.add(new_list)
         session.commit()
@@ -264,13 +283,20 @@ def get_or_create_system_list(name: str, session: Session) -> List:
         # If we get a unique constraint violation, try to fetch it again
         # (race condition scenario)
         logger.warning(f"Race condition detected while creating system list '{name}', retrying fetch")
-        statement = select(List).where(List.name == name, List.is_system == True)  # noqa: E712
-        list_instance = session.exec(statement).first()
-        if list_instance:
-            logger.info(f"Found system list after race condition: {name}, id: {list_instance.id}")
-            return list_instance
+        try:
+            statement = select(List).where(List.name == name, List.is_system == True)  # noqa: E712
+            list_instance = session.exec(statement).first()
+            if list_instance:
+                logger.info(f"Found system list after race condition: {name}, id: {list_instance.id}")
+                return list_instance
+        except Exception as fetch_error:
+            logger.error(f"Failed to fetch system list after race condition: {fetch_error}")
         logger.error(f"Failed to create system list '{name}': {e}")
         raise ValueError(f"Failed to create system list '{name}'") from e
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to get or create system list '{name}': {e}")
+        raise
 
 
 # ============================================================================
@@ -341,15 +367,19 @@ def get_task_by_id(task_id: int, session: Session) -> Task | None:
     """
     logger.info(f"Fetching task with id: {task_id}")
 
-    statement = select(Task).where(Task.id == task_id)
-    task_instance = session.exec(statement).first()
+    try:
+        statement = select(Task).where(Task.id == task_id)
+        task_instance = session.exec(statement).first()
 
-    if task_instance:
-        logger.info(f"Found task with id: {task_id}, title: {task_instance.title}")
-    else:
-        logger.warning(f"Task with id: {task_id} not found")
+        if task_instance:
+            logger.info(f"Found task with id: {task_id}, title: {task_instance.title}")
+        else:
+            logger.warning(f"Task with id: {task_id} not found")
 
-    return task_instance
+        return task_instance
+    except Exception as e:
+        logger.error(f"Failed to fetch task with id {task_id}: {e}")
+        raise
 
 
 def get_tasks_by_list(list_id: int, session: Session) -> list[Task]:
@@ -362,14 +392,27 @@ def get_tasks_by_list(list_id: int, session: Session) -> list[Task]:
 
     Returns:
         list[Task]: List of all Task instances for the specified list
+
+    Raises:
+        ValueError: If list_id is invalid or list not found
     """
     logger.info(f"Fetching tasks for list_id: {list_id}")
 
-    statement = select(Task).where(Task.list_id == list_id)
-    tasks = session.exec(statement).all()
+    # Validate list exists
+    list_instance = get_list_by_id(list_id, session)
+    if not list_instance:
+        logger.error(f"Cannot fetch tasks: list with id {list_id} not found")
+        raise ValueError(f"List with id {list_id} not found")
 
-    logger.info(f"Found {len(tasks)} tasks for list_id: {list_id}")
-    return list(tasks)
+    try:
+        statement = select(Task).where(Task.list_id == list_id)
+        tasks = session.exec(statement).all()
+
+        logger.info(f"Found {len(tasks)} tasks for list_id: {list_id}")
+        return list(tasks)
+    except Exception as e:
+        logger.error(f"Failed to fetch tasks for list_id {list_id}: {e}")
+        raise
 
 
 def update_task(task_id: int, session: Session, **kwargs) -> Task:
@@ -432,8 +475,12 @@ def update_task(task_id: int, session: Session, **kwargs) -> Task:
         return task_instance
     except IntegrityError as e:
         session.rollback()
-        logger.error(f"Failed to update task: {e}")
+        logger.error(f"Failed to update task with id {task_id}: integrity constraint violation - {e}")
         raise ValueError(f"Failed to update task: {e}") from e
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to update task with id {task_id}: {e}")
+        raise
 
 
 def delete_task(task_id: int, session: Session) -> bool:
@@ -487,17 +534,23 @@ def toggle_complete(task_id: int, session: Session) -> Task:
         logger.error(f"Cannot toggle task: task with id {task_id} not found")
         raise ValueError(f"Task with id {task_id} not found")
 
+    old_status = task_instance.is_completed
     task_instance.is_completed = not task_instance.is_completed
 
     # Update timestamp
     task_instance.updated_at = datetime.now()
 
-    session.add(task_instance)
-    session.commit()
-    session.refresh(task_instance)
+    try:
+        session.add(task_instance)
+        session.commit()
+        session.refresh(task_instance)
 
-    logger.info(f"Successfully toggled completion status for task with id: {task_id}, is_completed: {task_instance.is_completed}")
-    return task_instance
+        logger.info(f"Successfully toggled completion status for task with id: {task_id}, is_completed: {old_status} -> {task_instance.is_completed}")
+        return task_instance
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to toggle completion status for task with id {task_id}: {e}")
+        raise
 
 
 def toggle_important(task_id: int, session: Session) -> Task:
@@ -521,17 +574,23 @@ def toggle_important(task_id: int, session: Session) -> Task:
         logger.error(f"Cannot toggle task: task with id {task_id} not found")
         raise ValueError(f"Task with id {task_id} not found")
 
+    old_status = task_instance.is_important
     task_instance.is_important = not task_instance.is_important
 
     # Update timestamp
     task_instance.updated_at = datetime.now()
 
-    session.add(task_instance)
-    session.commit()
-    session.refresh(task_instance)
+    try:
+        session.add(task_instance)
+        session.commit()
+        session.refresh(task_instance)
 
-    logger.info(f"Successfully toggled important status for task with id: {task_id}, is_important: {task_instance.is_important}")
-    return task_instance
+        logger.info(f"Successfully toggled important status for task with id: {task_id}, is_important: {old_status} -> {task_instance.is_important}")
+        return task_instance
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to toggle important status for task with id {task_id}: {e}")
+        raise
 
 
 def get_important_tasks(session: Session) -> list[Task]:
@@ -546,11 +605,15 @@ def get_important_tasks(session: Session) -> list[Task]:
     """
     logger.info("Fetching all important tasks")
 
-    statement = select(Task).where(Task.is_important == True)  # noqa: E712
-    tasks = session.exec(statement).all()
+    try:
+        statement = select(Task).where(Task.is_important == True)  # noqa: E712
+        tasks = session.exec(statement).all()
 
-    logger.info(f"Found {len(tasks)} important tasks")
-    return list(tasks)
+        logger.info(f"Found {len(tasks)} important tasks")
+        return list(tasks)
+    except Exception as e:
+        logger.error(f"Failed to fetch important tasks: {e}")
+        raise
 
 
 def get_planned_tasks(session: Session) -> list[Task]:
@@ -565,11 +628,15 @@ def get_planned_tasks(session: Session) -> list[Task]:
     """
     logger.info("Fetching all planned tasks")
 
-    statement = select(Task).where(Task.due_date.isnot(None))
-    tasks = session.exec(statement).all()
+    try:
+        statement = select(Task).where(Task.due_date.isnot(None))
+        tasks = session.exec(statement).all()
 
-    logger.info(f"Found {len(tasks)} planned tasks")
-    return list(tasks)
+        logger.info(f"Found {len(tasks)} planned tasks")
+        return list(tasks)
+    except Exception as e:
+        logger.error(f"Failed to fetch planned tasks: {e}")
+        raise
 
 
 def get_all_tasks(session: Session, filters: dict | None = None) -> list[Task]:
@@ -587,30 +654,47 @@ def get_all_tasks(session: Session, filters: dict | None = None) -> list[Task]:
 
     Returns:
         list[Task]: List of all Task instances matching the filters
+
+    Raises:
+        ValueError: If list_id in filters is invalid or list not found
     """
     logger.info("Fetching all tasks" + (f" with filters: {filters}" if filters else ""))
 
-    statement = select(Task)
+    # Validate list_id if provided in filters
+    if filters and "list_id" in filters:
+        list_instance = get_list_by_id(filters["list_id"], session)
+        if not list_instance:
+            logger.error(f"Cannot fetch tasks: list with id {filters['list_id']} not found")
+            raise ValueError(f"List with id {filters['list_id']} not found")
 
-    if filters:
-        if "list_id" in filters:
-            statement = statement.where(Task.list_id == filters["list_id"])
-        if "is_completed" in filters:
-            statement = statement.where(Task.is_completed == filters["is_completed"])
-        if "is_important" in filters:
-            statement = statement.where(Task.is_important == filters["is_important"])
-        if "due_date" in filters:
-            statement = statement.where(Task.due_date == filters["due_date"])
-        if "title" in filters:
-            # Case-insensitive substring match
-            title_filter = filters["title"].strip()
-            if title_filter:
-                statement = statement.where(func.lower(Task.title).like(f"%{title_filter.lower()}%"))
+    try:
+        statement = select(Task)
 
-    tasks = session.exec(statement).all()
+        if filters:
+            if "list_id" in filters:
+                statement = statement.where(Task.list_id == filters["list_id"])
+            if "is_completed" in filters:
+                statement = statement.where(Task.is_completed == filters["is_completed"])
+            if "is_important" in filters:
+                statement = statement.where(Task.is_important == filters["is_important"])
+            if "due_date" in filters:
+                statement = statement.where(Task.due_date == filters["due_date"])
+            if "title" in filters:
+                # Case-insensitive substring match
+                title_filter = filters["title"].strip()
+                if title_filter:
+                    statement = statement.where(func.lower(Task.title).like(f"%{title_filter.lower()}%"))
 
-    logger.info(f"Found {len(tasks)} tasks" + (f" matching filters" if filters else ""))
-    return list(tasks)
+        tasks = session.exec(statement).all()
+
+        logger.info(f"Found {len(tasks)} tasks" + (f" matching filters" if filters else ""))
+        return list(tasks)
+    except ValueError:
+        # Re-raise ValueError (from list_id validation)
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch tasks: {e}")
+        raise
 
 
 def get_my_day_tasks(task_date: date, session: Session) -> list[Task]:
@@ -626,15 +710,19 @@ def get_my_day_tasks(task_date: date, session: Session) -> list[Task]:
     """
     logger.info(f"Fetching My Day tasks for date: {task_date}")
 
-    statement = (
-        select(Task)
-        .join(MyDayTask, Task.id == MyDayTask.task_id)
-        .where(MyDayTask.task_date == task_date)
-    )
-    tasks = session.exec(statement).all()
+    try:
+        statement = (
+            select(Task)
+            .join(MyDayTask, Task.id == MyDayTask.task_id)
+            .where(MyDayTask.task_date == task_date)
+        )
+        tasks = session.exec(statement).all()
 
-    logger.info(f"Found {len(tasks)} My Day tasks for date: {task_date}")
-    return list(tasks)
+        logger.info(f"Found {len(tasks)} My Day tasks for date: {task_date}")
+        return list(tasks)
+    except Exception as e:
+        logger.error(f"Failed to fetch My Day tasks for date {task_date}: {e}")
+        raise
 
 
 def add_to_my_day(task_id: int, task_date: date, session: Session) -> MyDayTask:
@@ -696,26 +784,38 @@ def remove_from_my_day(task_id: int, task_date: date, session: Session) -> bool:
 
     Returns:
         bool: True if task was removed, False if task was not found in My Day for this date
+
+    Raises:
+        ValueError: If task_id is invalid or task not found
     """
     logger.info(f"Removing task {task_id} from My Day for date: {task_date}")
 
-    statement = select(MyDayTask).where(
-        MyDayTask.task_id == task_id,
-        MyDayTask.task_date == task_date
-    )
-    my_day_task = session.exec(statement).first()
-
-    if not my_day_task:
-        logger.warning(f"Task {task_id} not found in My Day for date {task_date}")
-        return False
+    # Validate task exists
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot remove from My Day: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
 
     try:
+        statement = select(MyDayTask).where(
+            MyDayTask.task_id == task_id,
+            MyDayTask.task_date == task_date
+        )
+        my_day_task = session.exec(statement).first()
+
+        if not my_day_task:
+            logger.warning(f"Task {task_id} not found in My Day for date {task_date}")
+            return False
+
         session.delete(my_day_task)
         session.commit()
 
         logger.info(f"Successfully removed task {task_id} from My Day for date: {task_date}")
         return True
+    except ValueError:
+        # Re-raise ValueError (from task_id validation)
+        raise
     except Exception as e:
         session.rollback()
-        logger.error(f"Failed to remove task from My Day: {e}")
+        logger.error(f"Failed to remove task {task_id} from My Day for date {task_date}: {e}")
         raise
