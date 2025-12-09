@@ -80,12 +80,19 @@ def create_db_and_tables() -> None:
     Create database and all tables defined in SQLModel models.
 
     This function should be called on application startup to ensure
-    the database schema is initialized.
+    the database schema is initialized. Also initializes system lists.
     """
     try:
         engine = get_engine()
         SQLModel.metadata.create_all(engine)
         logger.info("Database tables created successfully")
+
+        # Initialize system lists
+        from vibe_todo.services import initialize_system_lists
+
+        with get_session() as session:
+            initialize_system_lists(session)
+            logger.info("System lists initialized successfully")
     except Exception as e:
         logger.error(f"Failed to create database tables: {e}")
         raise
