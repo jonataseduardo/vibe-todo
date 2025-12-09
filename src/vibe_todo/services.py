@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -268,3 +271,451 @@ def get_or_create_system_list(name: str, session: Session) -> List:
             return list_instance
         logger.error(f"Failed to create system list '{name}': {e}")
         raise ValueError(f"Failed to create system list '{name}'") from e
+
+
+# ============================================================================
+# Task Service Functions
+# ============================================================================
+
+
+def create_task(list_id: int, title: str, session: Session, **kwargs) -> Task:
+    """
+    Create a new task.
+
+    Args:
+        list_id: ID of the list to associate the task with
+        title: Title of the task
+        session: Database session
+        **kwargs: Additional task fields (description, due_date, is_completed, is_important)
+
+    Returns:
+        Task: The created task instance
+
+    Raises:
+        ValueError: If list_id is invalid or title is empty
+        IntegrityError: If list_id doesn't exist (foreign key constraint violation)
+    """
+    logger.info(f"Creating task with list_id: {list_id}, title: {title}")
+
+    if not title or not title.strip():
+        logger.error("Cannot create task with empty title")
+        raise ValueError("Task title cannot be empty")
+
+    # Verify list exists
+    list_instance = get_list_by_id(list_id, session)
+    if not list_instance:
+        logger.error(f"Cannot create task: list with id {list_id} not found")
+        raise ValueError(f"List with id {list_id} not found")
+
+    try:
+        new_task = Task(
+            list_id=list_id,
+            title=title.strip(),
+            description=kwargs.get("description"),
+            due_date=kwargs.get("due_date"),
+            is_completed=kwargs.get("is_completed", False),
+            is_important=kwargs.get("is_important", False),
+        )
+        session.add(new_task)
+        session.commit()
+        session.refresh(new_task)
+
+        logger.info(f"Successfully created task with id: {new_task.id}, title: {title}")
+        return new_task
+    except IntegrityError as e:
+        session.rollback()
+        logger.error(f"Failed to create task: {e}")
+        raise ValueError(f"Failed to create task: {e}") from e
+
+
+def get_task_by_id(task_id: int, session: Session) -> Task | None:
+    """
+    Get a task by its ID.
+
+    Args:
+        task_id: ID of the task to retrieve
+        session: Database session
+
+    Returns:
+        Task | None: The Task instance if found, None otherwise
+    """
+    logger.info(f"Fetching task with id: {task_id}")
+
+    statement = select(Task).where(Task.id == task_id)
+    task_instance = session.exec(statement).first()
+
+    if task_instance:
+        logger.info(f"Found task with id: {task_id}, title: {task_instance.title}")
+    else:
+        logger.warning(f"Task with id: {task_id} not found")
+
+    return task_instance
+
+
+def get_tasks_by_list(list_id: int, session: Session) -> list[Task]:
+    """
+    Get all tasks for a specific list.
+
+    Args:
+        list_id: ID of the list to retrieve tasks for
+        session: Database session
+
+    Returns:
+        list[Task]: List of all Task instances for the specified list
+    """
+    logger.info(f"Fetching tasks for list_id: {list_id}")
+
+    statement = select(Task).where(Task.list_id == list_id)
+    tasks = session.exec(statement).all()
+
+    logger.info(f"Found {len(tasks)} tasks for list_id: {list_id}")
+    return list(tasks)
+
+
+def update_task(task_id: int, session: Session, **kwargs) -> Task:
+    """
+    Update an existing task.
+
+    Args:
+        task_id: ID of the task to update
+        session: Database session
+        **kwargs: Task fields to update (title, description, due_date, is_completed, is_important, list_id)
+
+    Returns:
+        Task: The updated task instance
+
+    Raises:
+        ValueError: If task not found or invalid update values
+        IntegrityError: If list_id doesn't exist (foreign key constraint violation)
+    """
+    logger.info(f"Updating task with id: {task_id}")
+
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot update task: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
+
+    # Validate title if provided
+    if "title" in kwargs:
+        if not kwargs["title"] or not kwargs["title"].strip():
+            logger.error("Cannot update task with empty title")
+            raise ValueError("Task title cannot be empty")
+        task_instance.title = kwargs["title"].strip()
+
+    # Validate list_id if provided
+    if "list_id" in kwargs:
+        list_instance = get_list_by_id(kwargs["list_id"], session)
+        if not list_instance:
+            logger.error(f"Cannot update task: list with id {kwargs['list_id']} not found")
+            raise ValueError(f"List with id {kwargs['list_id']} not found")
+        task_instance.list_id = kwargs["list_id"]
+
+    # Update other fields if provided
+    if "description" in kwargs:
+        task_instance.description = kwargs["description"]
+    if "due_date" in kwargs:
+        task_instance.due_date = kwargs["due_date"]
+    if "is_completed" in kwargs:
+        task_instance.is_completed = kwargs["is_completed"]
+    if "is_important" in kwargs:
+        task_instance.is_important = kwargs["is_important"]
+
+    # Update timestamp
+    task_instance.updated_at = datetime.now()
+
+    try:
+        session.add(task_instance)
+        session.commit()
+        session.refresh(task_instance)
+
+        logger.info(f"Successfully updated task with id: {task_id}")
+        return task_instance
+    except IntegrityError as e:
+        session.rollback()
+        logger.error(f"Failed to update task: {e}")
+        raise ValueError(f"Failed to update task: {e}") from e
+
+
+def delete_task(task_id: int, session: Session) -> bool:
+    """
+    Delete a task by its ID.
+
+    Args:
+        task_id: ID of the task to delete
+        session: Database session
+
+    Returns:
+        bool: True if task was deleted, False if task was not found
+    """
+    logger.info(f"Deleting task with id: {task_id}")
+
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.warning(f"Cannot delete task: task with id {task_id} not found")
+        return False
+
+    try:
+        session.delete(task_instance)
+        session.commit()
+
+        logger.info(f"Successfully deleted task with id: {task_id}")
+        return True
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to delete task with id {task_id}: {e}")
+        raise
+
+
+def toggle_complete(task_id: int, session: Session) -> Task:
+    """
+    Toggle the completion status of a task.
+
+    Args:
+        task_id: ID of the task to toggle
+        session: Database session
+
+    Returns:
+        Task: The updated task instance
+
+    Raises:
+        ValueError: If task not found
+    """
+    logger.info(f"Toggling completion status for task with id: {task_id}")
+
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot toggle task: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
+
+    task_instance.is_completed = not task_instance.is_completed
+
+    # Update timestamp
+    task_instance.updated_at = datetime.now()
+
+    session.add(task_instance)
+    session.commit()
+    session.refresh(task_instance)
+
+    logger.info(f"Successfully toggled completion status for task with id: {task_id}, is_completed: {task_instance.is_completed}")
+    return task_instance
+
+
+def toggle_important(task_id: int, session: Session) -> Task:
+    """
+    Toggle the important status of a task.
+
+    Args:
+        task_id: ID of the task to toggle
+        session: Database session
+
+    Returns:
+        Task: The updated task instance
+
+    Raises:
+        ValueError: If task not found
+    """
+    logger.info(f"Toggling important status for task with id: {task_id}")
+
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot toggle task: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
+
+    task_instance.is_important = not task_instance.is_important
+
+    # Update timestamp
+    task_instance.updated_at = datetime.now()
+
+    session.add(task_instance)
+    session.commit()
+    session.refresh(task_instance)
+
+    logger.info(f"Successfully toggled important status for task with id: {task_id}, is_important: {task_instance.is_important}")
+    return task_instance
+
+
+def get_important_tasks(session: Session) -> list[Task]:
+    """
+    Get all tasks marked as important.
+
+    Args:
+        session: Database session
+
+    Returns:
+        list[Task]: List of all Task instances marked as important
+    """
+    logger.info("Fetching all important tasks")
+
+    statement = select(Task).where(Task.is_important == True)  # noqa: E712
+    tasks = session.exec(statement).all()
+
+    logger.info(f"Found {len(tasks)} important tasks")
+    return list(tasks)
+
+
+def get_planned_tasks(session: Session) -> list[Task]:
+    """
+    Get all tasks with a due date set (planned tasks).
+
+    Args:
+        session: Database session
+
+    Returns:
+        list[Task]: List of all Task instances with due_date set
+    """
+    logger.info("Fetching all planned tasks")
+
+    statement = select(Task).where(Task.due_date.isnot(None))
+    tasks = session.exec(statement).all()
+
+    logger.info(f"Found {len(tasks)} planned tasks")
+    return list(tasks)
+
+
+def get_all_tasks(session: Session, filters: dict | None = None) -> list[Task]:
+    """
+    Get all tasks with optional filters.
+
+    Args:
+        session: Database session
+        filters: Optional dictionary of filter conditions. Supported keys:
+            - list_id: Filter by list ID
+            - is_completed: Filter by completion status (bool)
+            - is_important: Filter by important status (bool)
+            - due_date: Filter by due date (date)
+            - title: Filter by title (substring match, case-insensitive)
+
+    Returns:
+        list[Task]: List of all Task instances matching the filters
+    """
+    logger.info("Fetching all tasks" + (f" with filters: {filters}" if filters else ""))
+
+    statement = select(Task)
+
+    if filters:
+        if "list_id" in filters:
+            statement = statement.where(Task.list_id == filters["list_id"])
+        if "is_completed" in filters:
+            statement = statement.where(Task.is_completed == filters["is_completed"])
+        if "is_important" in filters:
+            statement = statement.where(Task.is_important == filters["is_important"])
+        if "due_date" in filters:
+            statement = statement.where(Task.due_date == filters["due_date"])
+        if "title" in filters:
+            # Case-insensitive substring match
+            title_filter = filters["title"].strip()
+            if title_filter:
+                statement = statement.where(func.lower(Task.title).like(f"%{title_filter.lower()}%"))
+
+    tasks = session.exec(statement).all()
+
+    logger.info(f"Found {len(tasks)} tasks" + (f" matching filters" if filters else ""))
+    return list(tasks)
+
+
+def get_my_day_tasks(task_date: date, session: Session) -> list[Task]:
+    """
+    Get all tasks added to My Day for a specific date.
+
+    Args:
+        task_date: Date to retrieve My Day tasks for
+        session: Database session
+
+    Returns:
+        list[Task]: List of all Task instances for the specified date
+    """
+    logger.info(f"Fetching My Day tasks for date: {task_date}")
+
+    statement = (
+        select(Task)
+        .join(MyDayTask, Task.id == MyDayTask.task_id)
+        .where(MyDayTask.task_date == task_date)
+    )
+    tasks = session.exec(statement).all()
+
+    logger.info(f"Found {len(tasks)} My Day tasks for date: {task_date}")
+    return list(tasks)
+
+
+def add_to_my_day(task_id: int, task_date: date, session: Session) -> MyDayTask:
+    """
+    Add a task to My Day for a specific date.
+
+    Args:
+        task_id: ID of the task to add
+        task_date: Date to add the task to
+        session: Database session
+
+    Returns:
+        MyDayTask: The created MyDayTask instance
+
+    Raises:
+        ValueError: If task not found or already added to My Day for this date
+        IntegrityError: If task_id doesn't exist (foreign key constraint violation)
+    """
+    logger.info(f"Adding task {task_id} to My Day for date: {task_date}")
+
+    # Verify task exists
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot add to My Day: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
+
+    # Check if already added
+    statement = select(MyDayTask).where(
+        MyDayTask.task_id == task_id,
+        MyDayTask.task_date == task_date
+    )
+    existing = session.exec(statement).first()
+    if existing:
+        logger.warning(f"Task {task_id} already in My Day for date {task_date}")
+        return existing
+
+    try:
+        my_day_task = MyDayTask(task_id=task_id, task_date=task_date)
+        session.add(my_day_task)
+        session.commit()
+        session.refresh(my_day_task)
+
+        logger.info(f"Successfully added task {task_id} to My Day for date: {task_date}")
+        return my_day_task
+    except IntegrityError as e:
+        session.rollback()
+        logger.error(f"Failed to add task to My Day: {e}")
+        raise ValueError(f"Failed to add task to My Day: {e}") from e
+
+
+def remove_from_my_day(task_id: int, task_date: date, session: Session) -> bool:
+    """
+    Remove a task from My Day for a specific date.
+
+    Args:
+        task_id: ID of the task to remove
+        task_date: Date to remove the task from
+        session: Database session
+
+    Returns:
+        bool: True if task was removed, False if task was not found in My Day for this date
+    """
+    logger.info(f"Removing task {task_id} from My Day for date: {task_date}")
+
+    statement = select(MyDayTask).where(
+        MyDayTask.task_id == task_id,
+        MyDayTask.task_date == task_date
+    )
+    my_day_task = session.exec(statement).first()
+
+    if not my_day_task:
+        logger.warning(f"Task {task_id} not found in My Day for date {task_date}")
+        return False
+
+    try:
+        session.delete(my_day_task)
+        session.commit()
+
+        logger.info(f"Successfully removed task {task_id} from My Day for date: {task_date}")
+        return True
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to remove task from My Day: {e}")
+        raise
