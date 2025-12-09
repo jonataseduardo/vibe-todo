@@ -10,7 +10,9 @@ from vibe_todo.services import (
     toggle_important,
     remove_from_my_day,
     delete_task,
-    get_my_day_tasks
+    get_my_day_tasks,
+    get_all_tasks,
+    add_to_my_day
 )
 from vibe_todo.logger import logger
 
@@ -92,8 +94,20 @@ def render_task_card(task: Task, session: Session, show_remove_from_my_day: bool
                     except Exception as e:
                         st.error(f"Error deleting task: {e}")
 
-                if st.button("🗑️ Delete", key=f"delete_{task.id}", type="primary", use_container_width=True):
-                    on_delete()
+                if st.session_state.get(f"confirm_delete_{task.id}"):
+                    st.warning("Are you sure?")
+                    col_del_1, col_del_2 = st.columns(2)
+                    with col_del_1:
+                        if st.button("Yes", key=f"confirm_del_btn_{task.id}", type="primary", use_container_width=True):
+                            on_delete()
+                    with col_del_2:
+                        if st.button("No", key=f"cancel_del_btn_{task.id}", use_container_width=True):
+                            st.session_state[f"confirm_delete_{task.id}"] = False
+                            st.rerun()
+                else:
+                    if st.button("🗑️ Delete", key=f"delete_{task.id}", type="primary", use_container_width=True):
+                        st.session_state[f"confirm_delete_{task.id}"] = True
+                        st.rerun()
 
 
 def render_my_day_view(session: Session):
@@ -111,10 +125,28 @@ def render_my_day_view(session: Session):
         
         if not tasks:
             st.info("No tasks in My Day. Add some tasks from other lists!")
-            return
+        else:
+            for task in tasks:
+                render_task_card(task, session, show_remove_from_my_day=True)
 
-        for task in tasks:
-            render_task_card(task, session, show_remove_from_my_day=True)
+        st.divider()
+        with st.expander("➕ Add tasks from other lists"):
+            all_tasks = get_all_tasks(session)
+            # Filter out tasks already in My Day and completed tasks
+            my_day_ids = {t.id for t in tasks} if tasks else set()
+            available_tasks = [t for t in all_tasks if t.id not in my_day_ids and not t.is_completed]
+            
+            if not available_tasks:
+                st.info("No available tasks to add.")
+            else:
+                for task in available_tasks:
+                    c1, c2 = st.columns([0.8, 0.2])
+                    with c1:
+                        st.write(f"{task.title}")
+                    with c2:
+                        if st.button("Add", key=f"add_to_my_day_{task.id}"):
+                            add_to_my_day(task.id, today, session)
+                            st.rerun()
             
     except Exception as e:
         logger.error(f"Error rendering My Day view: {e}")
