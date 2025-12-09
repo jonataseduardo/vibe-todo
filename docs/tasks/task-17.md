@@ -7,17 +7,17 @@
 ## Subtasks
 
 ### 17.1 Implement Task Actions
-- [ ] Handle task completion toggle
-- [ ] Handle important toggle
-- [ ] Handle remove from My Day
-- [ ] Handle task deletion
-- [ ] Add confirmation for deletions
+- [x] Handle task completion toggle
+- [x] Handle important toggle
+- [x] Handle remove from My Day
+- [x] Handle task deletion
+- [x] Add confirmation for deletions
 
 ### 17.2 Add Task to My Day Functionality
-- [ ] Create "Add Task to My Day" section
-- [ ] Show list of available tasks
-- [ ] Allow selecting and adding tasks
-- [ ] Refresh view after adding
+- [x] Create "Add Task to My Day" section
+- [x] Show list of available tasks
+- [x] Allow selecting and adding tasks
+- [x] Refresh view after adding
 
 ## Acceptance Criteria
 - ✅ Tasks can be added/removed from My Day
