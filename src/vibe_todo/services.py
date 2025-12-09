@@ -819,3 +819,185 @@ def remove_from_my_day(task_id: int, task_date: date, session: Session) -> bool:
         session.rollback()
         logger.error(f"Failed to remove task {task_id} from My Day for date {task_date}: {e}")
         raise
+
+
+# ============================================================================
+# Subtask Service Functions
+# ============================================================================
+
+
+def get_subtask_by_id(subtask_id: int, session: Session) -> Subtask | None:
+    """
+    Get a subtask by its ID.
+
+    Args:
+        subtask_id: ID of the subtask to retrieve
+        session: Database session
+
+    Returns:
+        Subtask | None: The Subtask instance if found, None otherwise
+    """
+    logger.info(f"Fetching subtask with id: {subtask_id}")
+
+    try:
+        statement = select(Subtask).where(Subtask.id == subtask_id)
+        subtask_instance = session.exec(statement).first()
+
+        if subtask_instance:
+            logger.info(f"Found subtask with id: {subtask_id}, title: {subtask_instance.title}")
+        else:
+            logger.warning(f"Subtask with id: {subtask_id} not found")
+
+        return subtask_instance
+    except Exception as e:
+        logger.error(f"Failed to fetch subtask with id {subtask_id}: {e}")
+        raise
+
+
+def create_subtask(task_id: int, title: str, session: Session) -> Subtask:
+    """
+    Create a new subtask for a task.
+
+    Args:
+        task_id: ID of the parent task
+        title: Title of the subtask
+        session: Database session
+
+    Returns:
+        Subtask: The created subtask instance
+
+    Raises:
+        ValueError: If task_id is invalid or title is empty
+        IntegrityError: If task_id doesn't exist (foreign key constraint violation)
+    """
+    logger.info(f"Creating subtask with task_id: {task_id}, title: {title}")
+
+    if not title or not title.strip():
+        logger.error("Cannot create subtask with empty title")
+        raise ValueError("Subtask title cannot be empty")
+
+    # Verify task exists
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot create subtask: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
+
+    try:
+        new_subtask = Subtask(
+            task_id=task_id,
+            title=title.strip(),
+            is_completed=False,
+        )
+        session.add(new_subtask)
+        session.commit()
+        session.refresh(new_subtask)
+
+        logger.info(f"Successfully created subtask with id: {new_subtask.id}, title: {title}")
+        return new_subtask
+    except IntegrityError as e:
+        session.rollback()
+        logger.error(f"Failed to create subtask: {e}")
+        raise ValueError(f"Failed to create subtask: {e}") from e
+
+
+def get_subtasks_by_task(task_id: int, session: Session) -> list[Subtask]:
+    """
+    Get all subtasks for a specific task.
+
+    Args:
+        task_id: ID of the task to retrieve subtasks for
+        session: Database session
+
+    Returns:
+        list[Subtask]: List of all Subtask instances for the specified task
+
+    Raises:
+        ValueError: If task_id is invalid or task not found
+    """
+    logger.info(f"Fetching subtasks for task_id: {task_id}")
+
+    # Validate task exists
+    task_instance = get_task_by_id(task_id, session)
+    if not task_instance:
+        logger.error(f"Cannot fetch subtasks: task with id {task_id} not found")
+        raise ValueError(f"Task with id {task_id} not found")
+
+    try:
+        statement = select(Subtask).where(Subtask.task_id == task_id)
+        subtasks = session.exec(statement).all()
+
+        logger.info(f"Found {len(subtasks)} subtasks for task_id: {task_id}")
+        return list(subtasks)
+    except ValueError:
+        # Re-raise ValueError (from task_id validation)
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch subtasks for task_id {task_id}: {e}")
+        raise
+
+
+def toggle_subtask_complete(subtask_id: int, session: Session) -> Subtask:
+    """
+    Toggle the completion status of a subtask.
+
+    Args:
+        subtask_id: ID of the subtask to toggle
+        session: Database session
+
+    Returns:
+        Subtask: The updated subtask instance
+
+    Raises:
+        ValueError: If subtask not found
+    """
+    logger.info(f"Toggling completion status for subtask with id: {subtask_id}")
+
+    subtask_instance = get_subtask_by_id(subtask_id, session)
+    if not subtask_instance:
+        logger.error(f"Cannot toggle subtask: subtask with id {subtask_id} not found")
+        raise ValueError(f"Subtask with id {subtask_id} not found")
+
+    old_status = subtask_instance.is_completed
+    subtask_instance.is_completed = not subtask_instance.is_completed
+
+    try:
+        session.add(subtask_instance)
+        session.commit()
+        session.refresh(subtask_instance)
+
+        logger.info(f"Successfully toggled completion status for subtask with id: {subtask_id}, is_completed: {old_status} -> {subtask_instance.is_completed}")
+        return subtask_instance
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to toggle completion status for subtask with id {subtask_id}: {e}")
+        raise
+
+
+def delete_subtask(subtask_id: int, session: Session) -> bool:
+    """
+    Delete a subtask by its ID.
+
+    Args:
+        subtask_id: ID of the subtask to delete
+        session: Database session
+
+    Returns:
+        bool: True if subtask was deleted, False if subtask was not found
+    """
+    logger.info(f"Deleting subtask with id: {subtask_id}")
+
+    subtask_instance = get_subtask_by_id(subtask_id, session)
+    if not subtask_instance:
+        logger.warning(f"Cannot delete subtask: subtask with id {subtask_id} not found")
+        return False
+
+    try:
+        session.delete(subtask_instance)
+        session.commit()
+
+        logger.info(f"Successfully deleted subtask with id: {subtask_id}")
+        return True
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to delete subtask with id {subtask_id}: {e}")
+        raise
