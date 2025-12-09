@@ -15,6 +15,7 @@ from vibe_todo.state import (
     get_show_add_list_dialog,
     set_show_add_list_dialog
 )
+from vibe_todo.ui import render_my_day_view
 
 # configure page
 st.set_page_config(
@@ -153,14 +154,19 @@ if get_show_add_list_dialog():
                 st.rerun()
 
 # main content
-st.title("Hello World!")
-st.header("Welcome to Vibe Todo")
-st.write("This is a Microsoft TODO-like application built with Streamlit.")
+current_view_name = get_current_view()
+with get_db_session() as session:
+    if current_view_name == "My Day":
+        render_my_day_view(session)
+    else:
+        st.title("Hello World!")
+        st.header("Welcome to Vibe Todo")
+        st.write("This is a Microsoft TODO-like application built with Streamlit.")
 
-if get_current_view() == "List":
-    st.write(f"**Current view:** {get_current_view()} (ID: {get_selected_list_id()})")
-else:
-    st.write(f"**Current view:** {get_current_view()}")
+        if current_view_name == "List":
+            st.write(f"**Current view:** {current_view_name} (ID: {get_selected_list_id()})")
+        else:
+            st.write(f"**Current view:** {current_view_name}")
 
 # log that page was rendered
-logger.info("Hello world page rendered successfully")
+logger.info(f"Page rendered: {current_view_name}")

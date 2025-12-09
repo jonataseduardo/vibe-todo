@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from vibe_todo.logger import logger
-from vibe_todo.models import List, MyDayTask, Subtask, Task
+from vibe_todo.models import MyDayTask, Subtask, Task, TodoList
 
 
 # ============================================================================
@@ -17,7 +17,7 @@ from vibe_todo.models import List, MyDayTask, Subtask, Task
 # ============================================================================
 
 
-def initialize_system_lists(session: Session) -> list[List]:
+def initialize_system_lists(session: Session) -> list[TodoList]:
     """
     Initialize default system lists if they don't exist.
 
@@ -31,7 +31,7 @@ def initialize_system_lists(session: Session) -> list[List]:
         session: Database session
 
     Returns:
-        list[List]: List of all system lists (existing and newly created)
+        list[TodoList]: List of all system lists (existing and newly created)
     """
     logger.info("Initializing system lists")
 
@@ -57,7 +57,7 @@ def initialize_system_lists(session: Session) -> list[List]:
 # ============================================================================
 
 
-def create_list(name: str, session: Session) -> List:
+def create_list(name: str, session: Session) -> TodoList:
     """
     Create a new list.
 
@@ -66,7 +66,7 @@ def create_list(name: str, session: Session) -> List:
         session: Database session
 
     Returns:
-        List: The created list instance
+        TodoList: The created list instance
 
     Raises:
         ValueError: If list name is empty or invalid
@@ -79,7 +79,7 @@ def create_list(name: str, session: Session) -> List:
         raise ValueError("List name cannot be empty")
 
     try:
-        new_list = List(name=name.strip())
+        new_list = TodoList(name=name.strip())
         session.add(new_list)
         session.commit()
         session.refresh(new_list)
@@ -92,7 +92,7 @@ def create_list(name: str, session: Session) -> List:
         raise ValueError(f"List with name '{name}' already exists") from e
 
 
-def get_all_lists(session: Session) -> list[List]:
+def get_all_lists(session: Session) -> list[TodoList]:
     """
     Get all lists from the database.
 
@@ -100,12 +100,12 @@ def get_all_lists(session: Session) -> list[List]:
         session: Database session
 
     Returns:
-        list[List]: List of all List instances
+        list[TodoList]: List of all TodoList instances
     """
     logger.info("Fetching all lists")
 
     try:
-        statement = select(List)
+        statement = select(TodoList)
         lists = session.exec(statement).all()
 
         logger.info(f"Found {len(lists)} lists")
@@ -115,7 +115,7 @@ def get_all_lists(session: Session) -> list[List]:
         raise
 
 
-def get_list_by_id(list_id: int, session: Session) -> List | None:
+def get_list_by_id(list_id: int, session: Session) -> TodoList | None:
     """
     Get a list by its ID.
 
@@ -124,12 +124,12 @@ def get_list_by_id(list_id: int, session: Session) -> List | None:
         session: Database session
 
     Returns:
-        List | None: The List instance if found, None otherwise
+        TodoList | None: The TodoList instance if found, None otherwise
     """
     logger.info(f"Fetching list with id: {list_id}")
 
     try:
-        statement = select(List).where(List.id == list_id)
+        statement = select(TodoList).where(TodoList.id == list_id)
         list_instance = session.exec(statement).first()
 
         if list_instance:
@@ -143,7 +143,7 @@ def get_list_by_id(list_id: int, session: Session) -> List | None:
         raise
 
 
-def update_list(list_id: int, name: str, session: Session) -> List:
+def update_list(list_id: int, name: str, session: Session) -> TodoList:
     """
     Update an existing list's name.
 
@@ -153,7 +153,7 @@ def update_list(list_id: int, name: str, session: Session) -> List:
         session: Database session
 
     Returns:
-        List: The updated list instance
+        TodoList: The updated list instance
 
     Raises:
         ValueError: If list name is empty or list not found
@@ -217,7 +217,7 @@ def delete_list(list_id: int, session: Session) -> bool:
         raise ValueError(f"Cannot delete list with id {list_id}: it has associated tasks") from e
 
 
-def get_system_lists(session: Session) -> list[List]:
+def get_system_lists(session: Session) -> list[TodoList]:
     """
     Get all system lists from the database.
 
@@ -225,12 +225,12 @@ def get_system_lists(session: Session) -> list[List]:
         session: Database session
 
     Returns:
-        list[List]: List of all system List instances
+        list[TodoList]: List of all system TodoList instances
     """
     logger.info("Fetching all system lists")
 
     try:
-        statement = select(List).where(List.is_system == True)  # noqa: E712
+        statement = select(TodoList).where(TodoList.is_system == True)  # noqa: E712
         lists = session.exec(statement).all()
 
         logger.info(f"Found {len(lists)} system lists")
@@ -240,7 +240,7 @@ def get_system_lists(session: Session) -> list[List]:
         raise
 
 
-def get_or_create_system_list(name: str, session: Session) -> List:
+def get_or_create_system_list(name: str, session: Session) -> TodoList:
     """
     Get an existing system list by name, or create it if it doesn't exist.
 
@@ -249,7 +249,7 @@ def get_or_create_system_list(name: str, session: Session) -> List:
         session: Database session
 
     Returns:
-        List: The existing or newly created system list instance
+        TodoList: The existing or newly created system list instance
 
     Raises:
         ValueError: If name is empty or creation fails
@@ -262,7 +262,7 @@ def get_or_create_system_list(name: str, session: Session) -> List:
 
     try:
         # Try to find existing system list with this name
-        statement = select(List).where(List.name == name, List.is_system == True)  # noqa: E712
+        statement = select(TodoList).where(TodoList.name == name, TodoList.is_system == True)  # noqa: E712
         list_instance = session.exec(statement).first()
 
         if list_instance:
@@ -271,7 +271,7 @@ def get_or_create_system_list(name: str, session: Session) -> List:
 
         # Create new system list
         logger.info(f"Creating new system list with name: {name}")
-        new_list = List(name=name.strip(), is_system=True)
+        new_list = TodoList(name=name.strip(), is_system=True)
         session.add(new_list)
         session.commit()
         session.refresh(new_list)
@@ -284,7 +284,7 @@ def get_or_create_system_list(name: str, session: Session) -> List:
         # (race condition scenario)
         logger.warning(f"Race condition detected while creating system list '{name}', retrying fetch")
         try:
-            statement = select(List).where(List.name == name, List.is_system == True)  # noqa: E712
+            statement = select(TodoList).where(TodoList.name == name, TodoList.is_system == True)  # noqa: E712
             list_instance = session.exec(statement).first()
             if list_instance:
                 logger.info(f"Found system list after race condition: {name}, id: {list_instance.id}")

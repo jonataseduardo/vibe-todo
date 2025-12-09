@@ -422,7 +422,7 @@ class List(SQLModel, table=True):
 ```python
 # services.py
 from sqlmodel import Session, select
-from vibe_todo.models import Task, List
+from vibe_todo.models import Task, TodoList
 
 def create_task(list_id: int, title: str, session: Session, **kwargs) -> Task:
     task = Task(list_id=list_id, title=title, **kwargs)

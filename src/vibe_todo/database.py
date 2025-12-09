@@ -9,7 +9,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from vibe_todo.logger import logger
 
 # Import all models to register them with SQLModel metadata
-from vibe_todo.models import List, MyDayTask, Subtask, Task  # noqa: F401
+from vibe_todo.models import MyDayTask, Subtask, Task, TodoList  # noqa: F401
 
 # Database connection string
 DATABASE_URL = "sqlite:///data/todos.db"
